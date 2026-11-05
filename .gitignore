@@ -218,3 +218,22 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+# Apache Airflow
+airflow/
+airflow.cfg
+airflow.db
+logs/
+
+# Local SQLite databases
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# Secrets
+.env.*
+
+# macOS
+.DS_Store
+# Generated Markdown files
+data/markdown/
