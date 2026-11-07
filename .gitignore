@@ -153,6 +153,7 @@ activemq-data/
 .env
 .envrc
 .venv
+.airflow/
 env/
 venv/
 ENV/
@@ -232,6 +233,7 @@ logs/
 
 # Secrets
 .env.*
+!.env.example
 
 # macOS
 .DS_Store
