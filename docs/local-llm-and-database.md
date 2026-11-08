@@ -34,7 +34,7 @@ credentials. It uses these environment variables:
 | `LOCAL_LLM_API_KEY` | No | `ollama` | API key; local servers usually ignore it |
 | `LOCAL_LLM_JSON_MODE` | No | `true` | Send OpenAI JSON response mode |
 | `LOCAL_LLM_MAX_DOCUMENT_CHARS` | No | `60000` | Maximum Markdown characters sent |
-| `RESEARCH_PAPERS_DIR` | Yes | none | Google Drive-synced PDF directory |
+| `RESEARCH_PAPERS_DIR` | Yes | none | Local or Google Drive-synced PDF directory |
 
 Set `LOCAL_LLM_JSON_MODE=false` if a selected server or model does not accept
 `response_format={"type": "json_object"}`. The prompt still explicitly asks
@@ -65,8 +65,8 @@ changing their order, and unrecognized fields are not persisted.
 
 Invalid JSON and invalid field structures cause one new LLM request. After two
 invalid responses, `MetadataGenerationError` fails the task. Transport errors
-are allowed to propagate so Airflow records the real server error and can retry
-the task according to its retry policy.
+are allowed to propagate so Airflow records the real server error. After
+restoring the local service, rerun the failed task or trigger a new DAG run.
 
 ## Database contract
 
