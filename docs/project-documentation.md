@@ -285,23 +285,3 @@ local model, a real PDF, Airflow, and a valid Discord webhook.
 - Generated HTML escapes stored values to prevent paper metadata from injecting
   markup into the catalogue.
 
-## 16. Known limitations
-
-- PDF identity is based only on filename, not a content hash.
-- Subdirectories are not scanned.
-- Image-only PDFs need OCR before this pipeline can extract text.
-- Long documents are truncated rather than summarized in chunks.
-- SQLite is suitable for this single-machine assignment, not concurrent
-  distributed workers.
-- The generated site is static; access control and sharing are delegated to the
-  filesystem or Google Drive.
-- Discord delivery has no independent outbox, so recovery uses the failed
-  Airflow task instance.
-
-## 17. Suggested demonstration evidence
-
-For the assignment report or presentation, capture the Airflow graph with all
-five tasks successful, logs showing PDF discovery and metadata persistence, an
-SQLite query of the stored record, the extracted Markdown file, the searchable
-HTML catalogue, and the resulting Discord embed. This demonstrates both the
-orchestration and every externally visible output.
