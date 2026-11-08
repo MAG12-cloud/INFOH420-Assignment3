@@ -10,10 +10,15 @@ PROJECT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_DIR))
 
 from src.pdf_processing import detect_new_pdfs, convert_pdf_to_file
+from src.discord_notification import notify_discord
+from src.html_generator import generate_html
 
 PAPERS_DIR = os.environ.get("RESEARCH_PAPERS_DIR")
 DATABASE_PATH = str(PROJECT_DIR / "data" / "papers.db")
 MARKDOWN_DIR = str(PROJECT_DIR / "data" / "markdown")
+
+OUTPUT_DIR = Path(os.environ.get("RESEARCH_OUTPUT_DIR", ""))
+HTML_PATH = str(OUTPUT_DIR / "index.html")
 
 
 @dag(
@@ -51,8 +56,33 @@ def paper_pipeline():
 
         return markdown_files
 
+    @task
+    def send_notifications(processed_papers: list[dict]):
+        for paper in processed_papers:
+            notify_discord(
+                title=paper["title"],
+                category=paper["category"],
+                summary=paper["summary"]
+            )
+
+            print(f"Discord notification sent: {paper['title']}")
+
+    @task
+    def generate_website():
+        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+        generate_html(
+            DATABASE_PATH,
+            HTML_PATH
+        )
+
+        print(f"Website generated: {HTML_PATH}")
+
+    
     convert_papers(find_new_papers())
 
+    generate_website()
+    send_notifications("processed papeeeeeeeeeeeeer")  # need sqlite part
 
 paper_pipeline()
 
