@@ -24,7 +24,7 @@ def generate_html(database_path: str, output_path: str):
         for paper in papers
     })
 
-    # Generate category 
+    # Generate category
     category_options = ""
 
     for category in categories:

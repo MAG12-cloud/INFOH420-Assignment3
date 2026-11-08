@@ -1,275 +1,338 @@
 # INFOH420 — Assignment 3
 
-## Research PDF Processing Pipeline with Apache Airflow
+An Apache Airflow pipeline that turns research PDFs into a searchable study
+library. The pipeline extracts Markdown, generates structured metadata with a
+local LLM, stores it in SQLite, builds a static HTML index, and posts a Discord
+notification.
 
-This project was developed for **INFO-H420 — Process Modeling, Data Pipelines, and Responsible AI** at the Université Libre de Bruxelles (ULB).
-
-### 1. Project Overview
-
-The objective is to build an automated pipeline that transforms research papers in PDF format into a searchable study library.
-
-The pipeline uses Apache Airflow to coordinate the following operations:
-
-1. Detect new research PDFs in a Google Drive-synchronized folder.
-2. Convert PDFs into Markdown using PyMuPDF4LLM.
-3. Generate structured metadata using a locally hosted Large Language Model (LLM).
-4. Validate the generated JSON metadata.
-5. Store paper information in a local SQLite database.
-6. Generate a searchable HTML page.
-7. Send notifications through a Discord webhook when new papers are processed.
-
-The PDF detection and conversion stages have been tested successfully. The remaining components are developed separately and must be integrated and tested as part of the complete workflow.
-
-### 2. Technologies
-
-| Technology | Purpose |
-|---|---|
-| Python 3.12 | Programming language |
-| Apache Airflow | Workflow orchestration and scheduling |
-| Google Drive for Desktop | Synchronization of research PDFs and HTML output |
-| PyMuPDF4LLM | PDF-to-Markdown conversion |
-| Ollama or LM Studio | Local LLM inference |
-| OpenAI Python package | Communication with an OpenAI-compatible local endpoint |
-| SQLite | Metadata storage |
-| HTML, CSS, JavaScript | Searchable research library |
-| Discord webhook | Processing notifications |
-
-### 3. Project Structure
+## What the pipeline does
 
 ```text
-INFOH420-Assignment3/
-├── dags/
-│   └── paper_pipeline.py
-├── src/
-│   ├── pdf_processing.py
-│   ├── llm_processing.py
-│   ├── database.py
-│   ├── html_generator.py
-│   └── discord_notification.py
-├── data/
-│   └── .gitkeep
-├── requirements.txt
-├── .gitignore
-└── README.md
+find_new_papers
+        |
+        v
+convert_papers
+        |
+        v
+process_papers (Ollama/LM Studio + validation + SQLite)
+        |
+        +----------------------+
+        v                      v
+generate_website       send_notifications
 ```
 
-**Note:** The SQLite database, local Markdown files, virtual environment, Airflow configuration and credentials are excluded from version control.
+The DAG runs hourly, does not backfill, and allows one active run. Only PDFs
+whose filename is absent from SQLite are processed.
 
-### 4. Prerequisites
+## Quick start: run the complete project
 
-Before running the project, ensure that you have:
+The commands below use project-internal folders:
 
-- Python 3.12
-- Git
-- Google Drive for Desktop
-- Apache Airflow
-- A compatible locally served LLM, once the LLM component is integrated
-- A Discord webhook URL, once notifications are integrated
-
-### 5. Installation
-
-#### Step 1 — Clone the repository
-
-```bash
-git clone https://github.com/MAG12-cloud/INFOH420-Assignment3.git
-cd INFOH420-Assignment3
+```text
+data/papers/       input PDFs
+data/markdown/     extracted Markdown
+data/output/       generated index.html
+data/papers.db     local metadata database
 ```
 
-Repository access is required because the project is currently private.
+For the final assignment demonstration, the input and output directories can
+instead point to Google Drive. The database and Markdown should remain local.
 
-#### Step 2 — Create a virtual environment
+### 1. Open the project
 
 ```bash
-python3.12 -m venv .venv
+cd /path/to/INFOH420-Assignment3
+```
+
+### 2. Create and activate the virtual environment
+
+```bash
+python3 -m venv .venv
 source .venv/bin/activate
+python -m pip install --upgrade pip
 ```
 
-On Windows, the activation command is different. The configuration below was tested on macOS.
-
-#### Step 3 — Install Apache Airflow
-
-Install Airflow with version-specific constraints:
+Install the dependencies using the official Airflow constraints matching the
+active Python version:
 
 ```bash
-AIRFLOW_VERSION=3.3.2
-PYTHON_VERSION=3.12
+AIRFLOW_VERSION=3.0.6
+PYTHON_VERSION="$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+CONSTRAINT_URL="https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-${PYTHON_VERSION}.txt"
 
-python -m pip install "apache-airflow==${AIRFLOW_VERSION}" \
-  --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-${PYTHON_VERSION}.txt"
+python -m pip install -r requirements.txt --constraint "$CONSTRAINT_URL"
 ```
 
-Install the remaining dependencies:
+The constraints are important. Installing Airflow without them can select an
+incompatible PyJWT release and cause `POST /auth/token` to fail with HTTP 500.
+
+### 3. Create the local data directories
 
 ```bash
-python -m pip install pymupdf4llm openai
+mkdir -p data/papers data/markdown data/output
 ```
 
-### 6. Google Drive Configuration
+These generated directories, the database, Airflow state, and `.env` are
+ignored by Git.
 
-Create the following directory structure in your Google Drive:
+### 4. Install and prepare Ollama
 
-```text
-My Drive/
-└── ResearchLibrary/
-    ├── papers/
-    │   └── example.pdf
-    └── output/
-        └── index.html
-```
-
-The `papers/` directory contains input research PDFs.
-
-The `output/` directory is intended for the generated HTML library.
-
-The SQLite database must remain outside the Google Drive-synchronized directory.
-
-### 7. Environment Configuration
-
-The pipeline reads the Google Drive PDF directory through an environment variable.
-
-For macOS, configure:
+Install Ollama from <https://ollama.com/download>, then download the model:
 
 ```bash
-export RESEARCH_PAPERS_DIR="/path/to/GoogleDrive/My Drive/ResearchLibrary/papers"
+ollama pull llama3.2
+ollama list
 ```
 
-Replace the example with the actual local directory.
-
-Configure the Airflow home and DAG directory:
+The list should contain `llama3.2:latest`. The macOS Ollama application
+normally starts the server automatically. Otherwise, start it in a separate
+terminal:
 
 ```bash
-export AIRFLOW_HOME="$PWD/airflow"
-export AIRFLOW__CORE__DAGS_FOLDER="$PWD/dags"
+ollama serve
 ```
 
-These commands should be executed from the project root.
+If this reports that port `11434` is already in use, Ollama is already
+running.
 
-For the complete pipeline, the LLM endpoint and Discord webhook must also be configured according to the implementations in their corresponding modules. Do not commit passwords, API credentials, or webhook URLs to GitHub.
+### 5. Create the Discord webhook
 
-### 8. Running Apache Airflow
+In Discord:
 
-Start Airflow:
+1. Open the target server.
+2. Open **Server Settings → Integrations → Webhooks**.
+3. Select **New Webhook**.
+4. Choose the text channel that should receive paper notifications.
+5. Copy the webhook URL.
+
+Treat this URL as a password. Never commit or publish it.
+
+### 6. Configure the environment
+
+Create the local configuration:
+
+```bash
+cp .env.example .env
+```
+
+Open `.env` and replace the Discord placeholder with the copied webhook URL.
+The default input and output folders already point inside the project:
+
+```dotenv
+RESEARCH_PAPERS_DIR="$PWD/data/papers"
+RESEARCH_OUTPUT_DIR="$PWD/data/output"
+
+LOCAL_LLM_BASE_URL="http://localhost:11434/v1"
+LOCAL_LLM_API_KEY="ollama"
+LOCAL_LLM_MODEL="llama3.2"
+
+DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/..."
+```
+
+Load the configuration from the repository root:
+
+```bash
+set -a
+source .env
+set +a
+```
+
+Check the resolved directories:
+
+```bash
+printf '%s\n' "$RESEARCH_PAPERS_DIR" "$RESEARCH_OUTPUT_DIR"
+```
+
+### 7. Add PDFs
+
+Copy one or more PDFs into the input directory. Filenames must be unique:
+
+```bash
+cp "/absolute/path/to/paper.pdf" data/papers/
+ls -lh data/papers/
+```
+
+The detector scans only PDFs directly inside this directory; it does not scan
+subdirectories.
+
+### 8. Start Airflow
+
+Ensure the virtual environment is active and `.env` is loaded, then run:
 
 ```bash
 airflow standalone
 ```
 
-Open the web interface:
+Keep this terminal open. The provided configuration runs Airflow on port
+`8081` because port `8080` may already be occupied by Adminer.
 
-http://localhost:8080
+Open <http://localhost:8081>.
 
-Log in using your local Airflow credentials.
+The username is `admin`. Retrieve the generated password with:
 
-Navigate to **DAGs** and find:
-
-`paper_pipeline`
-
-The DAG is configured to run every hour.
-
-To execute it manually:
-
-1. Open `paper_pipeline`.
-2. Enable the DAG if necessary.
-3. Click **Trigger**.
-4. Select **Single Run**.
-5. Monitor the task execution results.
-
-### 9. PDF Detection and Conversion
-
-The implemented processing stages are:
-
-**Task 1: `find_new_papers`**
-
-Scans the synchronized `papers/` directory and identifies PDF filenames that are not recorded in the local `papers` SQLite table.
-
-If the database or table has not yet been created, all PDFs in the folder are considered eligible for processing.
-
-**Task 2: `convert_papers`**
-
-Converts the detected PDF files into Markdown using PyMuPDF4LLM.
-
-The generated Markdown files are saved in:
-
-```text
-data/markdown/
+```bash
+cat "$AIRFLOW_HOME/simple_auth_manager_passwords.json.generated"
 ```
 
-The task returns Markdown file paths for downstream processing.
+### 9. Trigger the pipeline
 
-Previously generated Markdown files may be reused when the corresponding PDF has not changed.
+From the Airflow interface:
 
-### 10. Local LLM and Metadata
+1. Open **DAGs**.
+2. Find `paper_pipeline`.
+3. Unpause it if necessary.
+4. Open it and select **Trigger DAG**.
+5. Monitor the graph until every task is green.
 
-The LLM component is intended to process the extracted Markdown and generate JSON containing:
+Alternatively, open a second terminal, load the same environment, and trigger
+it from the CLI:
 
-```json
-{
-  "title": "Paper title",
-  "summary": "A short summary of the paper.",
-  "keywords": ["keyword one", "keyword two"],
-  "category": "Data Engineering"
-}
+```bash
+cd /path/to/INFOH420-Assignment3
+source .venv/bin/activate
+set -a
+source .env
+set +a
+airflow dags trigger paper_pipeline
 ```
 
-The response must be parsed, validated and retried once if JSON parsing fails.
+The DAG also runs automatically every hour.
 
-The exact local LLM setup and execution instructions should be added after the team's LLM component is integrated and tested.
+### 10. Verify all outputs
 
-### 11. SQLite, HTML and Discord
+Inspect the database:
 
-The remaining components are intended to:
+```bash
+sqlite3 data/papers.db \
+  'SELECT filename, title, category FROM papers ORDER BY filename;'
+```
 
-- Store one metadata record per paper in SQLite.
-- Generate a static HTML index with search or category filtering.
-- Write the HTML output to the synchronized Google Drive directory.
-- Send a Discord webhook notification after successful processing of a new paper.
-
-The final end-to-end execution should be verified after these components are connected to the Airflow DAG.
-
-### 12. Testing and Verification
-
-The Airflow and PDF-processing components have been tested locally with a research PDF.
-
-The tested workflow successfully:
-
-- Detected a PDF in the Google Drive-synchronized folder.
-- Converted its contents into Markdown.
-- Saved the Markdown file locally.
-- Completed both Airflow tasks successfully.
-
-To inspect generated Markdown files:
+Inspect extracted Markdown:
 
 ```bash
 ls -lh data/markdown/
 ```
 
-To inspect the beginning of a converted paper:
+Open the searchable website:
 
 ```bash
-head -20 data/markdown/example.md
+open data/output/index.html
 ```
 
-Replace `example.md` with the actual generated filename.
+Finally, open the Discord channel selected during webhook creation. Each new
+paper appears as an embed titled **New paper processed!**.
 
-After integration, the complete pipeline should additionally be tested for database insertion, HTML generation, Discord notifications and prevention of duplicate processing.
+## Use Google Drive instead of internal folders
 
-### 13. Stopping Airflow
+Create this structure in a Google Drive-synchronized location:
 
-To stop the local Airflow services, return to the Terminal running Airflow and press:
+```text
+ResearchLibrary/
+├── papers/
+└── output/
+```
 
-`Ctrl + C`
+Set absolute local paths in `.env`:
 
-The application can be restarted later using `airflow standalone` with the same environment configuration.
+```dotenv
+RESEARCH_PAPERS_DIR="/local/Google Drive/ResearchLibrary/papers"
+RESEARCH_OUTPUT_DIR="/local/Google Drive/ResearchLibrary/output"
+```
 
-### 14. Group Collaboration
+Restart Airflow after changing `.env`. Google Drive then synchronizes the PDFs
+and generated HTML, while `data/papers.db` remains local as required.
 
-The project is developed collaboratively through GitHub. Each component is maintained in its corresponding Python module, while `dags/paper_pipeline.py` coordinates the workflow.
+## Reprocessing and duplicate behavior
 
-Before making changes, synchronize with the remote repository:
+- A filename already present in SQLite is skipped on later runs.
+- Adding a different PDF with a unique filename processes it normally.
+- Replacing a PDF while retaining its filename does not reprocess it.
+- A run with no new PDFs still regenerates the HTML page but sends no Discord
+  notifications.
+- If only `send_notifications` fails, clear and rerun that failed task from
+  the same DAG run. Triggering a new DAG run will not rediscover papers already
+  stored in SQLite.
+
+To intentionally start with a fresh database, preserve the old database first:
 
 ```bash
-git pull --ff-only origin main
+mv data/papers.db data/papers.backup.db
 ```
 
-After testing changes, commit and push the relevant files. Coordinate modifications to the shared DAG to avoid merge conflicts.# INFOH420-Assignment3
-Assignment 3 — Research PDF processing pipeline using Apache Airflow, a local LLM, SQLite, HTML, and Discord notifications.
+The next DAG run creates a new database.
+
+## Tests
+
+Run the unit suite:
+
+```bash
+source .venv/bin/activate
+python -m unittest discover -s tests -v
+```
+
+Check installed dependency consistency:
+
+```bash
+python -m pip check
+```
+
+Check DAG discovery:
+
+```bash
+set -a
+source .env
+set +a
+python -c "from airflow.models.dagbag import DagBag; b=DagBag('dags', include_examples=False); print(b.import_errors, sorted(b.dags))"
+```
+
+## Common problems
+
+### `POST /auth/token 500`
+
+Cause: Airflow was installed without its constraints and selected an
+incompatible PyJWT release.
+
+Fix:
+
+```bash
+source .venv/bin/activate
+python -m pip install "PyJWT==2.10.1"
+```
+
+Restart Airflow after installation.
+
+### Port 8080 opens Adminer
+
+Another Docker application owns port 8080. This project is configured for
+<http://localhost:8081>.
+
+### Discord returns HTTP 403
+
+The webhook must be valid, and the request must include a non-default
+`User-Agent`. The implementation already sends
+`User-Agent: INFOH420-Assignment3/1.0`. Restart Airflow after updating code.
+
+### The HTML file does not exist
+
+Confirm that `RESEARCH_OUTPUT_DIR` is correct, restart Airflow so it receives
+the environment, and trigger the DAG. The website task creates the directory
+and file.
+
+### No new PDFs are detected
+
+Check that the PDF is directly inside `RESEARCH_PAPERS_DIR` and that its
+filename is not already present:
+
+```bash
+sqlite3 data/papers.db 'SELECT filename FROM papers ORDER BY filename;'
+```
+
+## Complete technical documentation
+
+See [Project documentation](docs/project-documentation.md) for the complete
+architecture, task contracts, database design, LLM validation, HTML and Discord
+behavior, failure semantics, testing strategy, security considerations, and
+operational procedures.
+
+The focused [LLM and database guide](docs/local-llm-and-database.md) remains
+available for metadata-processing details.

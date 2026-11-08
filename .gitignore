@@ -26,6 +26,7 @@ share/python-wheels/
 *.egg
 MANIFEST
 
+
 # PyInstaller
 #   Usually these files are written by a python script from a template
 #   before PyInstaller builds the exe, so as to inject date/other infos into it.
@@ -153,6 +154,7 @@ activemq-data/
 .env
 .envrc
 .venv
+.airflow/
 env/
 venv/
 ENV/
@@ -232,8 +234,11 @@ logs/
 
 # Secrets
 .env.*
+!.env.example
 
 # macOS
 .DS_Store
 # Generated Markdown files
 data/markdown/
+data/output/
+data/papers/

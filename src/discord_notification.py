@@ -38,7 +38,7 @@ def notify_discord(title, category, summary):
     request = urllib.request.Request(
         webhook_url,
         data=data,
-        headers={"Content-Type": "application/json"},
+        headers={"Content-Type": "application/json", "User-Agent": "INFOH420-Assignment3/1.0"},
         method="POST"
     )
 
@@ -49,4 +49,3 @@ def notify_discord(title, category, summary):
             )
 
     print(f"Discord notification sent for: {title}")
-
