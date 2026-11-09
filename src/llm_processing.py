@@ -14,7 +14,7 @@ from typing import Any, Dict, Mapping, Optional
 
 DEFAULT_BASE_URL = "http://localhost:11434/v1"
 DEFAULT_API_KEY = "ollama"
-DEFAULT_MAX_DOCUMENT_CHARS = 60_000
+DEFAULT_MAX_DOCUMENT_CHARS = 10_000
 REQUIRED_FIELDS = ("title", "summary", "keywords", "category")
 
 
@@ -149,6 +149,7 @@ def generate_metadata(
 
     if len(markdown) > max_document_chars:
         markdown = markdown[:max_document_chars]
+
 
     selected_model = model or os.getenv("LOCAL_LLM_MODEL")
     if not selected_model:
